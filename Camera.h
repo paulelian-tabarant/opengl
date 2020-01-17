@@ -3,6 +3,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "Shader.h"
+
 class Camera 
 {
 
@@ -50,6 +52,8 @@ class Camera
                 fov = 45.0f;
         } 
 
+        glm::vec3 getPosition() { return pos; }
+
         glm::mat4 getViewMatrix() { return glm::lookAt(pos, pos + front, up); }
 
         glm::mat4 getProjMatrix(int widthPx, int heightPx) 
@@ -57,5 +61,10 @@ class Camera
             return glm::perspective(glm::radians(fov), 
                             widthPx / (float)heightPx, 
                             zNear, zFar);
+        }
+
+        void writePosInShader(Shader &shader, std::string name)
+        {
+            shader.setVec3(name, pos);
         }
 };
