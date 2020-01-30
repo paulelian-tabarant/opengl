@@ -7,7 +7,6 @@
 
 class Camera 
 {
-
     private:
         glm::vec3 pos   { glm::vec3(0.0f, 0.0f,  3.0f) };
         glm::vec3 front { glm::vec3(0.0f, 0.0f, -1.0f) };
@@ -19,6 +18,10 @@ class Camera
 
         float speed {2.5f};
         float sensibility {0.05f};
+
+        std::string camPosStr {"cameraPos"};
+        std::string viewMatStr {"view"};
+        std::string projectionMatStr {"projection"};
 
     public:
         void moveFromInput(float dz, float dx)
@@ -52,8 +55,14 @@ class Camera
                 fov = 45.0f;
         } 
 
-        glm::vec3 getPosition() { return pos; }
-
+        void writeToShader(Shader &shader, const unsigned int widthPx, const unsigned int heightPx)
+        {
+            shader.setVec3(camPosStr, pos);
+            shader.setMatrix4f(viewMatStr, this->getViewMatrix());
+            shader.setMatrix4f(projectionMatStr, this->getProjMatrix(widthPx, heightPx));
+        }
+    
+    private:
         glm::mat4 getViewMatrix() { return glm::lookAt(pos, pos + front, up); }
 
         glm::mat4 getProjMatrix(int widthPx, int heightPx) 
@@ -61,10 +70,5 @@ class Camera
             return glm::perspective(glm::radians(fov), 
                             widthPx / (float)heightPx, 
                             zNear, zFar);
-        }
-
-        void writePosInShader(Shader &shader, std::string name)
-        {
-            shader.setVec3(name, pos);
         }
 };

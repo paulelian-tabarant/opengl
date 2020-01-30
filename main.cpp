@@ -6,6 +6,7 @@
 #include "Shader.h"
 #include "Camera.h"
 #include "Light.h"
+#include "Object.h"
 #define STB_IMAGE_IMPLEMENTATION ;
 #include "stb_image.h"
 
@@ -15,18 +16,6 @@
 
 unsigned int screenWidth = 800, screenHeight = 600;
 
-std::string modelMatStr      = "model",
-            viewMatStr       = "view",
-            projectionMatStr = "projection";
-
-std::string cameraPosStr = "cameraPos";
-
-std::string lightColorStr = "lightColor",
-            lightPosStr   = "lightPos",
-            objColorStr   = "objColor";
-
-glm::vec3 objColor {glm::vec3(0.0f, 1.0f, 0.0f)};
-
 // Mouse interaction
 float lastX, lastY;
 bool firstMouse = true;
@@ -35,8 +24,7 @@ bool firstMouse = true;
 float deltaTime = 0.0f;
 float lastFrameTime = 0.0f;
 
-Camera camera { Camera() };
-Light *light {};
+Camera camera;
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow *window, double mouseX, double mouseY);
@@ -71,51 +59,6 @@ int main()
     // Scroll callback
     glfwSetScrollCallback(window, scroll_callback);
 
-    // Object data
-    float vertices[] = {
-    -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-     0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-     0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-     0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-    -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-    -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f, 
-
-    -0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-     0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-     0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-     0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-    -0.5f,  0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-    -0.5f, -0.5f,  0.5f,  0.0f,  0.0f, 1.0f,
-
-    -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-    -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-    -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-    -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-    -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-    -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-
-     0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-     0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-     0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-     0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-     0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-     0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-
-    -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-     0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-     0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-     0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-    -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-    -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-
-    -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-     0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-     0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-     0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-    -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-    -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
-    };
-
     glm::vec3 cubePositions[] = {
         glm::vec3( 0.0f,  0.0f,   0.0f), 
         glm::vec3( 2.0f,  5.0f, -15.0f), 
@@ -129,20 +72,6 @@ int main()
         glm::vec3(-1.3f,  1.0f,  -1.5f)  
     };
 
-    // initialize vertex attributs layout
-    unsigned int VAO;
-    glGenVertexArrays(1, &VAO);
-    glBindVertexArray(VAO);
-    // Prepare GPU buffer for receiving 3D positions
-    unsigned int VBO;
-    glGenBuffers(1, &VBO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    // Vertex attributes
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
 
     // Enable z-buffer
     glEnable(GL_DEPTH_TEST);
@@ -152,7 +81,10 @@ int main()
 
     // Init light object (also rendered as cube)
     Shader lightShader("light_vs.vert", "light_fs.frag");
-    light = new Light(VBO, 36);
+
+    Light light = Light();
+    Object object = Object();
+    camera = Camera();
 
     // Render loop
     while (!glfwWindowShouldClose(window)) {
@@ -164,33 +96,22 @@ int main()
 
         // Render objects
         objShader.use();
-        camera.writePosInShader(objShader, cameraPosStr);
-        objShader.setVec3(objColorStr, objColor);
-        light->writeColorInShader(objShader, lightColorStr);
-        light->writePosInShader(objShader, lightPosStr);
-        glBindVertexArray(VAO);
-        // View matrix
-        glm::mat4 view = camera.getViewMatrix();
-        objShader.setMatrix4f(viewMatStr, view);
-        // Projection matrix
-        glm::mat4 projection = camera.getProjMatrix(screenWidth, screenHeight);
-        objShader.setMatrix4f(projectionMatStr, projection);
+        light.writeToShader(objShader);
+        camera.writeToShader(objShader, screenWidth, screenHeight);
+
         // Draw cube vertices for each cube position previously set
         for (unsigned int i = 0; i < 10; i++) {
-            glm::mat4 model(1.0f);
-            model = glm::translate(model, cubePositions[i]);
-            float angle = 20.0f * i;
-            model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
-            objShader.setMatrix4f(modelMatStr, model);
-            glDrawArrays(GL_TRIANGLES, 0, 36);
+            object.setPosition(cubePositions[i]);
+            object.setAngle(20.0f * i);
+            object.writeToShader(objShader);
+            object.draw();
         }
 
         // Render light
         lightShader.use();
-        light->writeModelMatrixInShader(lightShader, modelMatStr);
-        lightShader.setMatrix4f(viewMatStr, view);
-        lightShader.setMatrix4f(projectionMatStr, projection);
-        light->draw();
+        camera.writeToShader(lightShader, screenWidth, screenHeight);
+        light.writeModelMatrixInShader(lightShader, "model");
+        light.draw();
 
         glfwSwapBuffers(window);
 
@@ -203,10 +124,6 @@ int main()
         glfwPollEvents();
     }
     
-    glDeleteVertexArrays(1, &VAO);
-    glDeleteBuffers(1, &VBO);
-    delete light;
-
     // Clean GLFW variables data
     glfwTerminate();
     return 0;
