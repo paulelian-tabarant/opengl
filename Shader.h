@@ -10,7 +10,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-class Shader {
+class Shader 
+{
 public:
     // Program ID
     unsigned int ID;
