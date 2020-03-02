@@ -7,14 +7,12 @@
 #include "Camera.h"
 #include "Light.h"
 #include "Object.h"
-#define STB_IMAGE_IMPLEMENTATION ;
-#include "stb_image.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-unsigned int screenWidth = 800, screenHeight = 600;
+unsigned int screenWidth = 1920, screenHeight = 1080;
 
 // Mouse interaction
 float lastX, lastY;
@@ -85,6 +83,10 @@ int main()
     Light light = Light();
     Object object = Object();
     camera = Camera();
+
+    glm::vec3 attenuation(1.0f, 0.09f, 0.032f);
+    objShader.use();
+    objShader.setVec3("a", attenuation);
 
     // Render loop
     while (!glfwWindowShouldClose(window)) {

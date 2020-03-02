@@ -4,7 +4,7 @@
 
 ### Vertices
 
-![](img-notes/vertex_array_objects.png)
+![VAO expliqué](img-notes/vertex_array_objects.png)
 
 Attention : respecter l'ordre suivant
 
