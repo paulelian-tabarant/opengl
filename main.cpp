@@ -5,7 +5,7 @@
 
 #include "Shader.h"
 #include "Camera.h"
-#include "Light.h"
+#include "LightTypes.h"
 #include "Object.h"
 
 #include <glm/glm.hpp>
@@ -70,23 +70,47 @@ int main()
         glm::vec3(-1.3f,  1.0f,  -1.5f)  
     };
 
+    // Init different types of light
+    DirLight dirLight(-0.2f, -0.2f, -0.2f);
+    dirLight.setUniformName("dirLight");
+    PointLight pointLights[] = {
+        PointLight( 0.7f,  0.2f,  2.0f),
+        PointLight( 2.3f, -3.3f, -4.0f),
+        PointLight(-4.0f,  2.0f, -12.0f),
+        PointLight( 0.0f,  0.0f, -3.0f)
+    };
+    for (unsigned i = 0; i < 4; i++) {
+        std::ostringstream lightNameStream;
+        lightNameStream << "pointLights["<<i<<"]";
+        pointLights[i].setUniformName(lightNameStream.str());
+    }
 
     // Enable z-buffer
     glEnable(GL_DEPTH_TEST);
 
     // Shader initialization
     Shader objShader("vs.vert", "fs.frag");
-
     // Init light object (also rendered as cube)
     Shader lightShader("light_vs.vert", "light_fs.frag");
 
-    Light light = Light();
-    Object object = Object();
-    camera = Camera();
+    // Init objects position and orientation
+    Object cubes[10];
+    for (unsigned int i = 0; i < 10; i++) {
+        cubes[i].setPosition(cubePositions[i]);
+        cubes[i].setAngle(20.0f * i);
+    }
+
+    // Set constant uniforms
+    objShader.use();
+    dirLight.writeToShader(objShader);
+    for (unsigned int i = 0; i < 4; i++)
+        pointLights[i].writeToShader(objShader);
 
     glm::vec3 attenuation(1.0f, 0.09f, 0.032f);
-    objShader.use();
-    objShader.setVec3("a", attenuation);
+    objShader.setVec3("attenuation", attenuation);
+
+    // Init camera object to navigate in the scene
+    camera = Camera();
 
     // Render loop
     while (!glfwWindowShouldClose(window)) {
@@ -98,22 +122,22 @@ int main()
 
         // Render objects
         objShader.use();
-        light.writeToShader(objShader);
+
         camera.writeToShader(objShader, screenWidth, screenHeight);
 
         // Draw cube vertices for each cube position previously set
         for (unsigned int i = 0; i < 10; i++) {
-            object.setPosition(cubePositions[i]);
-            object.setAngle(20.0f * i);
-            object.writeToShader(objShader);
-            object.draw();
+            cubes[i].writeToShader(objShader);
+            cubes[i].draw();
         }
 
         // Render light
         lightShader.use();
         camera.writeToShader(lightShader, screenWidth, screenHeight);
-        light.writeModelMatrixInShader(lightShader, "model");
-        light.draw();
+        for (unsigned int i = 0; i < 4; i++) {
+            pointLights[i].writeModelMatrixInShader(lightShader, "model");
+            pointLights[i].draw();
+        }
 
         glfwSwapBuffers(window);
 
