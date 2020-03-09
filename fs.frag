@@ -8,8 +8,13 @@ uniform vec3 cameraPos;
 uniform vec3 attenuation;
 
 struct Material {
-	sampler2D diffuse;
-	sampler2D specular;
+	sampler2D diffuse1;
+	sampler2D diffuse2;
+	sampler2D diffuse3;
+	sampler2D specular1;
+	sampler2D specular2;
+	sampler2D specular3;
+
 	float shininess;
 };
 uniform Material material;
@@ -35,36 +40,40 @@ uniform PointLight pointLights[POINT_LIGHTS_NB];
 
 vec3 computeDirLight(DirLight light, vec3 normal, vec3 viewDir)
 {
-    vec3 ambient = light.ambient * vec3(texture(material.diffuse, FragTexCoords));
+	vec3 ambient = light.ambient * vec3(texture(material.diffuse1, FragTexCoords));
 
 	vec3 lightDir = normalize(-light.direction);
 	float diffCoeff = max(dot(normal, lightDir), 0.0);
-	vec3 diffuse = light.diffuse * vec3(texture(material.diffuse, FragTexCoords)) * diffCoeff;
+	vec3 diffuse = light.diffuse * vec3(texture(material.diffuse1, FragTexCoords)) * diffCoeff;
 
 	vec3 reflectDir = reflect(-lightDir, normal);
 	float specCoeff = pow(max(dot(reflectDir, viewDir), 0.0), material.shininess);
-	vec3 specular = light.specular * vec3(texture(material.specular, FragTexCoords)) * specCoeff;
+	vec3 specular = light.specular * vec3(texture(material.specular1, FragTexCoords)) * specCoeff;
 
-	return ambient + diffuse + specular;
+	vec3 result = ambient + diffuse + specular;
+
+	return result;
 }
 
 vec3 computePointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 att)
 {
-    vec3 ambient = light.ambient * vec3(texture(material.diffuse, FragTexCoords));
+	vec3 ambient = light.ambient * vec3(texture(material.diffuse1, FragTexCoords));
 
 	vec3 lightDir = normalize(-(fragPos - light.position));
 	float diffCoeff = max(dot(normal, lightDir), 0.0);
-	vec3 diffuse = light.diffuse * vec3(texture(material.diffuse, FragTexCoords)) * diffCoeff;
+	vec3 diffuse = light.diffuse * vec3(texture(material.diffuse1, FragTexCoords)) * diffCoeff;
 
 	vec3 reflectDir = reflect(-lightDir, normal);
 	float specCoeff = pow(max(dot(reflectDir, viewDir), 0.0), material.shininess);
-	vec3 specular = light.specular * vec3(texture(material.specular, FragTexCoords)) * specCoeff;
+	vec3 specular = light.specular * vec3(texture(material.specular1, FragTexCoords)) * specCoeff;
+
+	vec3 result = ambient + diffuse + specular;
 
 	float d = length(FragPos - light.position);
 	float a = 1 / (att[0] + att[1] * d + att[2] * pow(d, 2.0));
+	result *= a;
 
-    vec3 result = ambient + diffuse + specular;
-	return result * a;
+	return result;
 }
 
 void main() 

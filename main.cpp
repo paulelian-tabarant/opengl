@@ -6,18 +6,18 @@
 #include "Shader.h"
 #include "Camera.h"
 #include "LightTypes.h"
-#include "Object.h"
+#include "Model.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <sstream>
 
 unsigned int screenWidth = 1920, screenHeight = 1080;
 
 // Mouse interaction
 float lastX, lastY;
 bool firstMouse = true;
-
 // Timing
 float deltaTime = 0.0f;
 float lastFrameTime = 0.0f;
@@ -29,9 +29,19 @@ void mouse_callback(GLFWwindow *window, double mouseX, double mouseY);
 void scroll_callback(GLFWwindow* window, double dx, double dy);
 void processInput(GLFWwindow *window);
 
-int main() 
+int main(int argc, char *argv[])
 {
-    glfwInit(); 
+
+    // Init model object
+    char path[100];
+    sprintf(path, "Models/%s", argv[1]);
+    std::ifstream f(path);
+    if (!f.good()) {
+	std::cout << "Error : could not find specified model file." << std::endl;
+	return -1;
+    }
+
+    glfwInit();
     // Set running versions of OpenGL
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -57,19 +67,6 @@ int main()
     // Scroll callback
     glfwSetScrollCallback(window, scroll_callback);
 
-    glm::vec3 cubePositions[] = {
-        glm::vec3( 0.0f,  0.0f,   0.0f), 
-        glm::vec3( 2.0f,  5.0f, -15.0f), 
-        glm::vec3(-1.5f, -2.2f,  -2.5f),  
-        glm::vec3(-3.8f, -2.0f, -12.3f),  
-        glm::vec3( 2.4f, -0.4f,  -3.5f),  
-        glm::vec3(-1.7f,  3.0f,  -7.5f),  
-        glm::vec3( 1.3f, -2.0f,  -2.5f),  
-        glm::vec3( 1.5f,  2.0f,  -2.5f), 
-        glm::vec3( 1.5f,  0.2f,  -1.5f), 
-        glm::vec3(-1.3f,  1.0f,  -1.5f)  
-    };
-
     // Init different types of light
     DirLight dirLight(-0.2f, -0.2f, -0.2f);
     dirLight.setUniformName("dirLight");
@@ -85,6 +82,9 @@ int main()
         pointLights[i].setUniformName(lightNameStream.str());
     }
 
+    // Init object model
+    Model objModel(path);
+
     // Enable z-buffer
     glEnable(GL_DEPTH_TEST);
 
@@ -92,13 +92,6 @@ int main()
     Shader objShader("vs.vert", "fs.frag");
     // Init light object (also rendered as cube)
     Shader lightShader("light_vs.vert", "light_fs.frag");
-
-    // Init objects position and orientation
-    Object cubes[10];
-    for (unsigned int i = 0; i < 10; i++) {
-        cubes[i].setPosition(cubePositions[i]);
-        cubes[i].setAngle(20.0f * i);
-    }
 
     // Set constant uniforms
     objShader.use();
@@ -122,16 +115,14 @@ int main()
 
         // Render objects
         objShader.use();
-
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(0.0f, -1.75f, 0.0f));
+        model = glm::scale(model, glm::vec3(0.2f, 0.2f, 0.2f));
+        objShader.setMatrix4f("model", model);
         camera.writeToShader(objShader, screenWidth, screenHeight);
+        objModel.draw(objShader);
 
-        // Draw cube vertices for each cube position previously set
-        for (unsigned int i = 0; i < 10; i++) {
-            cubes[i].writeToShader(objShader);
-            cubes[i].draw();
-        }
-
-        // Render light
+        // Render light models to locate them in space
         lightShader.use();
         camera.writeToShader(lightShader, screenWidth, screenHeight);
         for (unsigned int i = 0; i < 4; i++) {
@@ -141,7 +132,7 @@ int main()
 
         glfwSwapBuffers(window);
 
-		// Per-frame timing 
+	// Per-frame timing
         float curTime = glfwGetTime();
         deltaTime = curTime - lastFrameTime;
         lastFrameTime = curTime;
@@ -149,7 +140,7 @@ int main()
         // Look for new interaction events
         glfwPollEvents();
     }
-    
+
     // Clean GLFW variables data
     glfwTerminate();
     return 0;
@@ -158,15 +149,15 @@ int main()
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
     glViewport(0, 0, width, height);
-} 
+}
 
 void mouse_callback(GLFWwindow *window, double mouseX, double mouseY)
 {
-	if (firstMouse) {
-		lastX = mouseX;
-		lastY = mouseY;
-		firstMouse = false;
-	}
+    if (firstMouse) {
+	lastX = mouseX;
+	lastY = mouseY;
+	firstMouse = false;
+    }
 
     float dx = mouseX - lastX, dy = mouseY - lastY;
     camera.rotateFromInput(dx, dy);
