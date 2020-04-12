@@ -43,7 +43,7 @@ public:
             shader.setFloat(texUniformName.str(), i);
             glBindTexture(GL_TEXTURE_2D, textures[i].id);
         }
-        shader.setFloat("material.shininess", 30.0f);
+        shader.setFloat("material.shininess", 100.0f);
 
         // Detach lastly used texture
         glActiveTexture(GL_TEXTURE0);

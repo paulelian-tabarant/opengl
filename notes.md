@@ -2,6 +2,10 @@
 
 ## Stockage des données de géométrie
 
+### Système de coordonnées
+
+![Transformations pipeline graphique](img-notes/coordinate_systems.png)
+
 ### Vertices
 
 ![VAO expliqué](img-notes/vertex_array_objects.png)
@@ -34,7 +38,17 @@ Définie par 3 vecteurs :
 
 [Lien explicatif](https://www.scratchapixel.com/lessons/3d-basic-rendering/rasterization-practical-implementation/rasterization-stage)
 
-### Outils pratiques
+## Gestion des buffers OpenGL
+
+Il existe différentes manières de gérer les données stockées dans des buffers GPU (données de Vertex, indices, textures...). Lorsque l'on spécifie un buffer à envoyer au GPU, on a différentes macros qui nous permettent d'indiquer au GPU comment gérer ce buffer.
+
+- `STATIC` si l'utilisateur ne modifie pas son contenu après envoi
+- `DYNAMIC` si on veut pouvoir modifier le contenu du buffer de temps à autre
+- `STREAM` si l'on veut modifier son contenu à chaque nouvelle lecture
+
+Son usage concret (lecture, écriture, copie) est aussi spécifié par des mots clés. Pour plus d'informations, se référer à la section **Buffer Object Usage** à [ce lien](https://www.khronos.org/opengl/wiki/Buffer_Object).
+
+## Chargement / export de modèles 3D
 
 ~~~C++
 glEnableVertexAttribArray(0);
@@ -47,7 +61,7 @@ glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(
 
 `offsetof` est une directive de préprocesseur qui permet de calculer le nombre d'octets en mémoire entre deux champs d'un type composé `struct`. Pratique pour spécifier un offset pour un attribut de Vertex à aller lire dans un buffer.
 
-#### Assimp
+### Assimp
 
 ![Schéma d'une scène Assimp](img-notes/assimp_structure.png)
 
