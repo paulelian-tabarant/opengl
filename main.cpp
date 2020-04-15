@@ -31,22 +31,12 @@ void processInput(GLFWwindow *window);
 
 int main(int argc, char *argv[])
 {
-
-    // Init model object
-    char path[100];
-    sprintf(path, "Models/%s", argv[1]);
-    std::ifstream f(path);
-    if (!f.good()) {
-	std::cout << "Error : could not find specified model file." << std::endl;
-	return -1;
-    }
-
     glfwInit();
     // Set running versions of OpenGL
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    GLFWwindow* window = glfwCreateWindow(screenWidth, screenHeight, "Hello world", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(screenWidth, screenHeight, "Hello OpenGL", NULL, NULL);
     if (window == NULL) {
         std::cout << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
@@ -58,7 +48,6 @@ int main(int argc, char *argv[])
         std::cout << "Failed to initialize GLAD" << std::endl;
         return -1;
     }
-    glViewport(0, 0, screenWidth, screenHeight);
     // Always set callbacks after having created the window
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     // Enable cursor capture for input callbacks (& hide hint)
@@ -68,22 +57,23 @@ int main(int argc, char *argv[])
     glfwSetScrollCallback(window, scroll_callback);
 
     // Init different types of light
-    DirLight dirLight(-0.2f, -0.2f, -0.2f);
+    DirLight dirLight(-1.5f, -3.0f, -1.5f);
     dirLight.setUniformName("dirLight");
-    PointLight pointLights[] = {
-        PointLight( 0.7f,  0.2f,  2.0f),
-        PointLight( 2.3f, -3.3f, -4.0f),
-        PointLight(-4.0f,  2.0f, -12.0f),
-        PointLight( 0.0f,  0.0f, -3.0f)
-    };
-    for (unsigned i = 0; i < 4; i++) {
-        std::ostringstream lightNameStream;
-        lightNameStream << "pointLights["<<i<<"]";
-        pointLights[i].setUniformName(lightNameStream.str());
-    }
 
-    // Init object model
-    Model objModel(path);
+    // Init object models
+    Model *cubes[3];
+    for (unsigned int i = 0; i < 3; i++) {
+        cubes[i] = new Model("Models/cube/cube.obj");
+    }
+    cubes[0]->setRotation(45.0f, glm::vec3(0.5f, 0.5f, 0.0f));
+    cubes[1]->setRotation(-60.0f, glm::vec3(0.1f, 0.0f, 0.8f));
+    cubes[1]->setPosition(-1.5f, 0.0f, 1.0f);
+    cubes[2]->setRotation(30.0f, glm::vec3(0.0f, 0.2f, 1.0f));
+    cubes[2]->setPosition(2.0f, 0.0f, 0.0f);
+    Model floorModel("Models/floor/floor.obj");
+    floorModel.setScale(0.3f, 0.3f, 0.3f);
+    floorModel.setRotation(-90.0f, glm::vec3(1.0f, 0.0f, 0.0f));
+    floorModel.setPosition(0.0f, 0.0f, -3.0f);
 
     // Enable z-buffer
     glEnable(GL_DEPTH_TEST);
@@ -92,15 +82,8 @@ int main(int argc, char *argv[])
     Shader objShader("vs.vert", "fs.frag");
     // Init light object (also rendered as cube)
     Shader lightShader("light_vs.vert", "light_fs.frag");
-
-    // Set constant uniforms
-    objShader.use();
-    dirLight.writeToShader(objShader);
-    for (unsigned int i = 0; i < 4; i++)
-        pointLights[i].writeToShader(objShader);
-
-    glm::vec3 attenuation(1.0f, 0.09f, 0.032f);
-    objShader.setVec3("attenuation", attenuation);
+    // Shadow mapping
+    Shader depthShader("lightDepthShaderVS.vert", "lightDepthShaderFS.frag");
 
     // Init camera object to navigate in the scene
     camera = Camera();
@@ -110,29 +93,46 @@ int main(int argc, char *argv[])
         // Handle user input in a specific function
         processInput(window);
 
-        glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
+        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // Render objects
-        objShader.use();
-        glm::mat4 model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(0.0f, -1.75f, 0.0f));
-        model = glm::scale(model, glm::vec3(0.2f, 0.2f, 0.2f));
-        objShader.setMatrix4f("model", model);
-        camera.writeToShader(objShader, screenWidth, screenHeight);
-        objModel.draw(objShader);
+        depthShader.use();
+        depthShader.setMatrix4f("lightSpaceMatrix", dirLight.getLightSpaceMatrix());
 
-        // Render light models to locate them in space
-        lightShader.use();
-        camera.writeToShader(lightShader, screenWidth, screenHeight);
-        for (unsigned int i = 0; i < 4; i++) {
-            pointLights[i].writeModelMatrixInShader(lightShader, "model");
-            pointLights[i].draw();
+        glViewport(0, 0, dirLight.SHADOW_WIDTH, dirLight.SHADOW_HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, dirLight.depthMapFBO);
+            glClear(GL_DEPTH_BUFFER_BIT);
+            for (unsigned int i = 0; i < 3; i++) {
+                depthShader.setMatrix4f("model", cubes[i]->getModelMat());
+                cubes[i]->draw(depthShader);
+            }
+            depthShader.setMatrix4f("model", floorModel.getModelMat());
+            floorModel.draw(depthShader);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        glViewport(0, 0, screenWidth, screenHeight);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        objShader.use();
+        // view, projection and cameraPos uniforms
+        camera.writeToShader(objShader, screenWidth, screenHeight);
+        dirLight.writeToShader(objShader);
+        // TODO: embed this instruction in above writeToShader() method
+        objShader.setMatrix4f("lightSpaceMatrix", dirLight.getLightSpaceMatrix());
+        // Use frame buffer result from the depth shader pass
+        objShader.setInt("shadowMap", 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, dirLight.depthMap);
+        // Render objects
+        for (unsigned int i = 0; i < 3; i++) {
+            objShader.setMatrix4f("model", cubes[i]->getModelMat());
+            cubes[i]->draw(objShader);
         }
+        objShader.setMatrix4f("model", floorModel.getModelMat());
+        floorModel.draw(objShader);
 
         glfwSwapBuffers(window);
 
-	// Per-frame timing
+        // Per-frame timing
         float curTime = glfwGetTime();
         deltaTime = curTime - lastFrameTime;
         lastFrameTime = curTime;

@@ -29,6 +29,12 @@ private:
     std::string dir;
     std::vector<Texture> loadedTextures;
 
+    glm::mat4 modelMat {glm::mat4(1.0f)};
+    glm::vec3 position {glm::vec3(0.0f)},
+              rotationAxis {glm::vec3(0.0f, 1.0f, 0.0f)},
+              scale {glm::vec3(1.0f)};
+    float rotationAngleDegrees {0.0f};
+
 private:
     void loadModel(std::string path)
     {
@@ -130,6 +136,38 @@ private:
         return textures;
     }
 
+    void updateModelMat()
+    {
+        modelMat = glm::mat4(1.0f);
+        modelMat = glm::scale(modelMat, scale);
+        modelMat = glm::rotate(modelMat, glm::radians(rotationAngleDegrees), glm::normalize(rotationAxis));
+        modelMat = glm::translate(modelMat, position);
+    }
+
+public:
+    void setPosition(const float &x, const float &y, const float &z)
+    {
+        position = glm::vec3(x,y,z);
+        updateModelMat();
+    }
+
+    void setScale(const float &x, const float &y, const float &z)
+    {
+        scale = glm::vec3(x,y,z);
+        updateModelMat();
+    }
+
+    void setRotation(const float &angleDegrees, const glm::vec3 &axisVector)
+    {
+        rotationAngleDegrees = angleDegrees;
+        rotationAxis = axisVector;
+        updateModelMat();
+    }
+
+    glm::mat4 getModelMat()
+    {
+        return modelMat;
+    }
 };
 
 // utility function for loading a 2D texture from file

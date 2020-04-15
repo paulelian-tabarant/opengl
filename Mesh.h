@@ -33,14 +33,14 @@ public:
     {
         unsigned int diffuseIdx {1}, specularIdx {1};
         for (unsigned int i = 0; i < textures.size(); i++) {
-            glActiveTexture(GL_TEXTURE0 + i);
+            glActiveTexture(GL_TEXTURE0 + i + 1);
             std::ostringstream texUniformName;
             texUniformName << "material.";
             if (textures[i].type == "diffuse")
-                texUniformName << "diffuse"<<diffuseIdx++;
+                texUniformName << "diffuse"/*<<diffuseIdx++*/;
             else if (textures[i].type == "specular")
-                texUniformName << "specular"<<specularIdx++;
-            shader.setFloat(texUniformName.str(), i);
+                texUniformName << "specular"/*<<specularIdx++*/;
+            shader.setInt(texUniformName.str(), i + 1);
             glBindTexture(GL_TEXTURE_2D, textures[i].id);
         }
         shader.setFloat("material.shininess", 100.0f);
@@ -50,7 +50,7 @@ public:
 
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
-        // Detach vertex array after use
+        // Detach verex array after use
         glBindVertexArray(0);
     }
 
