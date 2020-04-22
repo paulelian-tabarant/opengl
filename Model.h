@@ -13,7 +13,7 @@ unsigned int loadTexture(const char *path, const std::string &dir);
 class Model
 {
 public:
-    Model(char *path)
+    Model(const char *path)
     {
         loadModel(path);
     }
@@ -36,7 +36,7 @@ private:
     float rotationAngleDegrees {0.0f};
 
 private:
-    void loadModel(std::string path)
+    void loadModel(const std::string &path)
     {
         Assimp::Importer importer;
         const aiScene *scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs);
@@ -49,7 +49,7 @@ private:
         processNode(scene->mRootNode, scene);
     }
 
-    void processNode(aiNode *node, const aiScene *scene)
+    void processNode(const aiNode *node, const aiScene *scene)
     {
         for (unsigned int i = 0; i < node->mNumMeshes; i++) {
             aiMesh *mesh = scene->mMeshes[node->mMeshes[i]];
@@ -60,7 +60,7 @@ private:
         }
     }
 
-    Mesh processMesh(aiMesh *mesh, const aiScene *scene)
+    Mesh processMesh(const aiMesh *mesh, const aiScene *scene)
     {
         std::vector<Vertex> vertices;
         std::vector<unsigned int> indices;
@@ -104,7 +104,7 @@ private:
         return Mesh(vertices, indices, textures);
     }
 
-    std::vector<Texture> loadMaterialTextures(aiMaterial *mat, aiTextureType type, std::string typeName)
+    std::vector<Texture> loadMaterialTextures(const aiMaterial *mat, const aiTextureType &type, const std::string &typeName)
     {
         std::vector<Texture> textures;
         for (unsigned int i = 0; i < mat->GetTextureCount(type); i++) {

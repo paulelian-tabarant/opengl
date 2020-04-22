@@ -88,12 +88,12 @@ public:
         glDeleteBuffers(1, &VBO);
     }
 
-    void setPosition(glm::vec3 position)
+    void setPosition(const glm::vec3 &position)
     {
         pos = position;
     }
 
-    void setAngle(float angle)
+    void setAngle(const float &angle)
     {
         rot = angle;
     }

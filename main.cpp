@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include <cmath>
+#include <memory>
 
 #include "Shader.h"
 #include "Camera.h"
@@ -13,21 +14,28 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <sstream>
 
-unsigned int screenWidth = 1920, screenHeight = 1080;
+const unsigned int screenWidth {1920}, screenHeight {1080};
 
 // Mouse interaction
 float lastX, lastY;
-bool firstMouse = true;
+bool firstMouse {true};
+
 // Timing
-float deltaTime = 0.0f;
-float lastFrameTime = 0.0f;
+float deltaTime     {0.0f},
+      lastFrameTime {0.0f};
 
-Camera camera;
+std::unique_ptr<Camera> camera;
+std::unique_ptr<Model> roomCube;
+std::unique_ptr<Model> cubes[3];
+std::unique_ptr<PointLight> pointLight;
 
+// GLFW callback functions
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow *window, double mouseX, double mouseY);
 void scroll_callback(GLFWwindow* window, double dx, double dy);
+
 void processInput(GLFWwindow *window);
+void renderScene(Shader &shader);
 
 int main(int argc, char *argv[])
 {
@@ -56,37 +64,36 @@ int main(int argc, char *argv[])
     // Scroll callback
     glfwSetScrollCallback(window, scroll_callback);
 
-    // Init different types of light
-    DirLight dirLight(-1.5f, -3.0f, -1.5f);
-    dirLight.setUniformName("dirLight");
-
     // Init object models
-    Model *cubes[3];
-    for (unsigned int i = 0; i < 3; i++) {
-        cubes[i] = new Model("Models/cube/cube.obj");
-    }
+    roomCube = std::make_unique<Model>("Models/cube/cube.obj");
+    roomCube->setScale(10.0f, 10.0f, 10.0f);
+
+    for (unsigned int i = 0; i < 3; i++)
+        cubes[i] = std::make_unique<Model>("Models/cube/cube.obj");
+
+    cubes[0]->setPosition(0.0f, 2.0f, 1.0f);
     cubes[0]->setRotation(45.0f, glm::vec3(0.5f, 0.5f, 0.0f));
+    cubes[1]->setPosition(-3.0f, 0.0f, 2.0f);
     cubes[1]->setRotation(-60.0f, glm::vec3(0.1f, 0.0f, 0.8f));
-    cubes[1]->setPosition(-1.5f, 0.0f, 1.0f);
     cubes[2]->setRotation(30.0f, glm::vec3(0.0f, 0.2f, 1.0f));
-    cubes[2]->setPosition(2.0f, 0.0f, 0.0f);
-    Model floorModel("Models/floor/floor.obj");
-    floorModel.setScale(0.3f, 0.3f, 0.3f);
-    floorModel.setRotation(-90.0f, glm::vec3(1.0f, 0.0f, 0.0f));
-    floorModel.setPosition(0.0f, 0.0f, -3.0f);
+    cubes[2]->setPosition(4.0f, 0.0f, 0.0f);
+
+    pointLight = std::make_unique<PointLight>();
+    // Call this method to generate a whole cubic depth map for shadow rendering
+    pointLight->initCubeMap();
 
     // Enable z-buffer
     glEnable(GL_DEPTH_TEST);
 
     // Shader initialization
-    Shader objShader("vs.vert", "fs.frag");
+    Shader objShader("sceneVS.vert", "", "sceneFS.frag");
     // Init light object (also rendered as cube)
-    Shader lightShader("light_vs.vert", "light_fs.frag");
+    Shader lightShader("lightVS.vert", "", "lightFS.frag");
     // Shadow mapping
-    Shader depthShader("lightDepthShaderVS.vert", "lightDepthShaderFS.frag");
+    Shader depthShader("depthShaderVS.vert", "depthShaderGS.geom", "depthShaderFS.frag");
 
     // Init camera object to navigate in the scene
-    camera = Camera();
+    camera = std::make_unique<Camera>();
 
     // Render loop
     while (!glfwWindowShouldClose(window)) {
@@ -96,39 +103,38 @@ int main(int argc, char *argv[])
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        depthShader.use();
-        depthShader.setMatrix4f("lightSpaceMatrix", dirLight.getLightSpaceMatrix());
+        float x = sin(glfwGetTime() * 0.5) * 5.0;
+        pointLight->setPosition(glm::vec3(x, 0.0f, -1.0f));
 
-        glViewport(0, 0, dirLight.SHADOW_WIDTH, dirLight.SHADOW_HEIGHT);
-        glBindFramebuffer(GL_FRAMEBUFFER, dirLight.depthMapFBO);
-            glClear(GL_DEPTH_BUFFER_BIT);
-            for (unsigned int i = 0; i < 3; i++) {
-                depthShader.setMatrix4f("model", cubes[i]->getModelMat());
-                cubes[i]->draw(depthShader);
-            }
-            depthShader.setMatrix4f("model", floorModel.getModelMat());
-            floorModel.draw(depthShader);
+        // Generate the shadow map : 1st render pass
+        glViewport(0, 0, pointLight->SHADOW_WIDTH, pointLight->SHADOW_HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, pointLight->depthMapFBO);
+            glClear(GL_DEPTH_BUFFER_BIT); // check if this line is necessary
+            depthShader.use();
+            pointLight->writeToDepthShader(depthShader);
+            renderScene(depthShader);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        // Note: GL_DEPTH_BUFFER_BIT automatically discards hidden fragments
+        // from calculations under the hood (as it is also done with classic rendering
+        // when fragments are behind others from the camera point of view)
 
+        // Render scene with shadow map results
         glViewport(0, 0, screenWidth, screenHeight);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         objShader.use();
         // view, projection and cameraPos uniforms
-        camera.writeToShader(objShader, screenWidth, screenHeight);
-        dirLight.writeToShader(objShader);
-        // TODO: embed this instruction in above writeToShader() method
-        objShader.setMatrix4f("lightSpaceMatrix", dirLight.getLightSpaceMatrix());
+        camera->writeToShader(objShader, screenWidth, screenHeight);
         // Use frame buffer result from the depth shader pass
-        objShader.setInt("shadowMap", 0);
+        objShader.setInt("cubeMap", 0);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, dirLight.depthMap);
-        // Render objects
-        for (unsigned int i = 0; i < 3; i++) {
-            objShader.setMatrix4f("model", cubes[i]->getModelMat());
-            cubes[i]->draw(objShader);
-        }
-        objShader.setMatrix4f("model", floorModel.getModelMat());
-        floorModel.draw(objShader);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, pointLight->getCubeMapTextureId());
+        pointLight->writeToShader(objShader);
+        renderScene(objShader);
+
+        lightShader.use();
+        camera->writeToShader(lightShader, screenWidth, screenHeight);
+        pointLight->writeModelMatrixInShader(lightShader, "model");
+        pointLight->draw();
 
         glfwSwapBuffers(window);
 
@@ -146,6 +152,20 @@ int main(int argc, char *argv[])
     return 0;
 }
 
+void renderScene(Shader &shader)
+{
+    // Scene cubes
+    for (unsigned int i = 0; i < 3; i++) {
+        shader.setMatrix4f("model", cubes[i]->getModelMat());
+        cubes[i]->draw(shader);
+    }
+    // Room walls as a cube
+    shader.setMatrix4f("model", roomCube->getModelMat());
+    shader.setInt("reverseNormals", 1);
+    roomCube->draw(shader);
+    shader.setInt("reverseNormals", 0);
+}
+
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
     glViewport(0, 0, width, height);
@@ -160,7 +180,7 @@ void mouse_callback(GLFWwindow *window, double mouseX, double mouseY)
     }
 
     float dx = mouseX - lastX, dy = mouseY - lastY;
-    camera.rotateFromInput(dx, dy);
+    camera->rotateFromInput(dx, dy);
 
     lastX = mouseX;
     lastY = mouseY;
@@ -168,7 +188,7 @@ void mouse_callback(GLFWwindow *window, double mouseX, double mouseY)
 
 void scroll_callback(GLFWwindow* window, double dx, double dy)
 {
-    camera.zoomFromScroll(dy);
+    camera->zoomFromScroll(dy);
 }
 
 void processInput(GLFWwindow *window)
@@ -178,11 +198,11 @@ void processInput(GLFWwindow *window)
 
     const float camSpeed = 2.5f * deltaTime;
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        camera.moveFromInput(deltaTime, 0.0f);
+        camera->moveFromInput(deltaTime, 0.0f);
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        camera.moveFromInput(-deltaTime, 0.0f);
+        camera->moveFromInput(-deltaTime, 0.0f);
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        camera.moveFromInput(0.0f, -deltaTime);
+        camera->moveFromInput(0.0f, -deltaTime);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        camera.moveFromInput(0.0f, deltaTime);
+        camera->moveFromInput(0.0f, deltaTime);
 }
