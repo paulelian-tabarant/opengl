@@ -27,6 +27,7 @@ float deltaTime     {0.0f},
 std::unique_ptr<Camera> camera;
 std::unique_ptr<Model> roomCube;
 std::unique_ptr<Model> cubes[3];
+std::unique_ptr<Model> stitch;
 std::unique_ptr<PointLight> pointLight;
 
 // GLFW callback functions
@@ -78,6 +79,9 @@ int main(int argc, char *argv[])
     cubes[2]->setRotation(30.0f, glm::vec3(0.0f, 0.2f, 1.0f));
     cubes[2]->setPosition(4.0f, 0.0f, 0.0f);
 
+    stitch = std::make_unique<Model>("Models/stitch/stitch.obj");
+    stitch->setPosition(2.0f, 0.0f, -1.0f);
+
     pointLight = std::make_unique<PointLight>();
     // Call this method to generate a whole cubic depth map for shadow rendering
     pointLight->initCubeMap();
@@ -103,7 +107,7 @@ int main(int argc, char *argv[])
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        float x = sin(glfwGetTime() * 0.5) * 5.0;
+        float x = sin(glfwGetTime() * 0.5) * 3.0;
         pointLight->setPosition(glm::vec3(x, 0.0f, -1.0f));
 
         // Generate the shadow map : 1st render pass
@@ -159,6 +163,9 @@ void renderScene(Shader &shader)
         shader.setMatrix4f("model", cubes[i]->getModelMat());
         cubes[i]->draw(shader);
     }
+    shader.setMatrix4f("model", stitch->getModelMat());
+    stitch->draw(shader);
+
     // Room walls as a cube
     shader.setMatrix4f("model", roomCube->getModelMat());
     shader.setInt("reverseNormals", 1);

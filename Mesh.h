@@ -22,6 +22,7 @@ public:
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
     std::vector<Texture> textures;
+    float shininess {100.0f};
 
     Mesh(std::vector<Vertex> vertices, std::vector<unsigned int> indices, std::vector<Texture> textures) :
         vertices(vertices), indices(indices), textures(textures)
@@ -29,21 +30,31 @@ public:
         setupMesh();
     }
 
+    void setSpecularShininess(const float &s) { shininess = s; }
+
     void draw(Shader &shader)
     {
         unsigned int diffuseIdx {1}, specularIdx {1};
+
+        shader.setBool("material.hasDiffuse",  false);
+        shader.setBool("material.hasSpecular", false);
+
         for (unsigned int i = 0; i < textures.size(); i++) {
             glActiveTexture(GL_TEXTURE0 + i + 1);
             std::ostringstream texUniformName;
             texUniformName << "material.";
-            if (textures[i].type == "diffuse")
-                texUniformName << "diffuse"/*<<diffuseIdx++*/;
-            else if (textures[i].type == "specular")
-                texUniformName << "specular"/*<<specularIdx++*/;
+            if (textures[i].type == "diffuse") {
+                texUniformName << "diffuse";
+                shader.setBool("material.hasDiffuse", true);
+            }
+            else if (textures[i].type == "specular") {
+                texUniformName << "specular";
+                shader.setBool("material.hasSpecular", true);
+            }
             shader.setInt(texUniformName.str(), i + 1);
             glBindTexture(GL_TEXTURE_2D, textures[i].id);
         }
-        shader.setFloat("material.shininess", 100.0f);
+        shader.setFloat("material.shininess", shininess);
 
         // Detach lastly used texture
         glActiveTexture(GL_TEXTURE0);

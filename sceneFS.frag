@@ -8,11 +8,12 @@ in VertexData {
 out vec4 FragColor;
 
 uniform vec3 cameraPos;
-uniform vec3 attenuation;
 
 struct Material {
 	sampler2D diffuse;
 	sampler2D specular;
+	bool hasDiffuse;
+	bool hasSpecular;
 
 	float shininess;
 };
@@ -66,17 +67,24 @@ float computeShadow(vec3 fragPos, Light light)
 
 float ks = 0.2;
 
-vec3 computePointLight(Light light, vec3 normal, vec3 fragPos, vec3 viewDir, vec3 att)
+vec3 computePointLight(Light light, vec3 normal, vec3 fragPos, vec2 texCoords, vec3 viewDir)
 {
-	vec3 ambient = light.ambient * vec3(texture(material.diffuse, fs_in.FragTexCoords));
+	vec3 ambient = light.ambient;
+	if (material.hasDiffuse) ambient *= vec3(texture(material.diffuse, texCoords));
 
 	vec3 lightDir = normalize(-(fragPos - light.position));
 	float diffCoeff = max(dot(normal, lightDir), 0.0);
-	vec3 diffuse = light.diffuse * vec3(texture(material.diffuse, fs_in.FragTexCoords)) * diffCoeff;
+	vec3 diffuse = light.diffuse * diffCoeff;
+	if (material.hasDiffuse)
+		diffuse *= vec3(texture(material.diffuse, texCoords));
 
 	vec3 reflectDir = reflect(-lightDir, normal);
 	float specCoeff = pow(max(dot(reflectDir, viewDir), 0.0), material.shininess);
-	vec3 specular = light.specular /** vec3(texture(material.specular, fs_in.FragTexCoords))*/ * specCoeff;
+	vec3 specular = light.specular * specCoeff;
+	/*
+	if (material.hasSpecular)
+		specular *= vec3(texture(material.specular, texCoords));
+	*/
 
 	float shadow = computeShadow(fragPos, light);
 	vec3 result = ambient + (1.0 - shadow) * (diffuse + ks * specular);
@@ -95,7 +103,7 @@ void main()
 	vec3 viewDir = normalize(cameraPos - fs_in.FragPos);
 	vec3 normal = normalize(fs_in.FragNormal);
 
-	result += computePointLight(light, normal, fs_in.FragPos, viewDir, attenuation);
+	result += computePointLight(light, normal, fs_in.FragPos, fs_in.FragTexCoords, viewDir);
 
     FragColor = vec4(result, 1.0);
 	/*

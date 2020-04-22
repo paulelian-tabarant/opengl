@@ -93,15 +93,20 @@ private:
                 indices.push_back(face.mIndices[j]);
         }
 
+        float shininess {0.0f};
         if (mesh->mMaterialIndex >= 0) {
             aiMaterial *material = scene->mMaterials[mesh->mMaterialIndex];
+            material->Get(AI_MATKEY_SHININESS, shininess);
             std::vector<Texture> diffuseMaps = loadMaterialTextures(material, aiTextureType_DIFFUSE, "diffuse");
             textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
             std::vector<Texture> specularMaps = loadMaterialTextures(material, aiTextureType_SPECULAR, "specular");
             textures.insert(textures.end(), specularMaps.begin(), specularMaps.end());
         }
 
-        return Mesh(vertices, indices, textures);
+        Mesh meshObj(vertices, indices, textures);
+        if (shininess != 0.0f) meshObj.setSpecularShininess(shininess);
+
+        return meshObj;
     }
 
     std::vector<Texture> loadMaterialTextures(const aiMaterial *mat, const aiTextureType &type, const std::string &typeName)
