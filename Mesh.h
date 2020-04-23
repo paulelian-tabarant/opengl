@@ -16,45 +16,103 @@ struct Texture {
     std::string path;
 };
 
+const std::string materialUniformName {"material"};
+
+const std::string diffuseTexField     {"diffuseTex"     },
+                  specularTexField    {"specularTex"    },
+                  hasDiffuseTexField  {"hasDiffuseTex"  },
+                  hasSpecularTexField {"hasSpecularTex" },
+                  ambientColorField   {"ambientColor"   },
+                  diffuseColorField   {"diffuseColor"   },
+                  specularColorField  {"specularColor"  },
+                  shininessField      {"shininess"      };
+
+std::string diffuseTexUniformName,
+            specularTexUniformName,
+            hasDiffuseTexUniformName,
+            hasSpecularTexUniformName,
+            ambientColorUniformName,
+            diffuseColorUniformName,
+            specularColorUniformName,
+            shininessUniformName;
+
 class Mesh
 {
 public:
+    struct Material {
+        glm::vec3 ambientColor;
+        glm::vec3 diffuseColor;
+        glm::vec3 specularColor;
+
+        float shininess {100.0f};
+    };
+private:
+    Material material;
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
     std::vector<Texture> textures;
-    float shininess {100.0f};
+public:
 
     Mesh(std::vector<Vertex> vertices, std::vector<unsigned int> indices, std::vector<Texture> textures) :
         vertices(vertices), indices(indices), textures(textures)
     {
         setupMesh();
+
+        // Setup shader material properties
+        std::ostringstream uniformStream;
+        uniformStream << materialUniformName << "." << diffuseTexField;
+        diffuseTexUniformName = uniformStream.str();
+        uniformStream = std::ostringstream();
+        uniformStream << materialUniformName << "." << specularTexField;
+        specularTexUniformName = uniformStream.str();
+        uniformStream = std::ostringstream();
+        uniformStream << materialUniformName << "." << hasDiffuseTexField;
+        hasDiffuseTexUniformName = uniformStream.str();
+        uniformStream = std::ostringstream();
+        uniformStream << materialUniformName << "." << hasSpecularTexField;
+        hasSpecularTexUniformName = uniformStream.str();
+        uniformStream = std::ostringstream();
+        uniformStream << materialUniformName << "." << ambientColorField;
+        ambientColorUniformName = uniformStream.str();
+        uniformStream = std::ostringstream();
+        uniformStream << materialUniformName << "." << diffuseColorField;
+        diffuseColorUniformName = uniformStream.str();
+        uniformStream = std::ostringstream();
+        uniformStream << materialUniformName << "." << specularColorField;
+        specularColorUniformName = uniformStream.str();
+        uniformStream = std::ostringstream();
+        uniformStream << materialUniformName << "." << shininessField;
+        shininessUniformName = uniformStream.str();
     }
 
-    void setSpecularShininess(const float &s) { shininess = s; }
+    void setMaterial(const Material &mat) { material = mat; }
 
     void draw(Shader &shader)
     {
         unsigned int diffuseIdx {1}, specularIdx {1};
 
-        shader.setBool("material.hasDiffuse",  false);
-        shader.setBool("material.hasSpecular", false);
+        shader.setBool(hasDiffuseTexUniformName,  false);
+        shader.setBool(hasSpecularTexUniformName, false);
 
         for (unsigned int i = 0; i < textures.size(); i++) {
             glActiveTexture(GL_TEXTURE0 + i + 1);
-            std::ostringstream texUniformName;
-            texUniformName << "material.";
             if (textures[i].type == "diffuse") {
-                texUniformName << "diffuse";
-                shader.setBool("material.hasDiffuse", true);
+                // i + 1 is because we use texture 0 for shadow mapping
+                shader.setInt(diffuseTexUniformName, i + 1);
+                glBindTexture(GL_TEXTURE_2D, textures[i].id);
+                shader.setBool(hasDiffuseTexUniformName, true);
             }
             else if (textures[i].type == "specular") {
-                texUniformName << "specular";
-                shader.setBool("material.hasSpecular", true);
+                shader.setInt(specularTexUniformName, i + 1);
+                glBindTexture(GL_TEXTURE_2D, textures[i].id);
+                shader.setBool(hasSpecularTexUniformName, true);
             }
-            shader.setInt(texUniformName.str(), i + 1);
-            glBindTexture(GL_TEXTURE_2D, textures[i].id);
         }
-        shader.setFloat("material.shininess", shininess);
+        // Apply material properties
+        shader.setVec3(ambientColorUniformName, material.ambientColor);
+        shader.setVec3(diffuseColorUniformName, material.diffuseColor);
+        shader.setVec3(specularColorUniformName, material.specularColor);
+        shader.setFloat(shininessUniformName, material.shininess);
 
         // Detach lastly used texture
         glActiveTexture(GL_TEXTURE0);

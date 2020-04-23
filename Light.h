@@ -12,9 +12,9 @@ private:
                 diffuseFieldName  {"diffuse"},
                 specularFieldName {"specular"};
 
-    glm::vec3 ambient  {glm::vec3(0.4f, 0.4f, 0.4f)};
-    glm::vec3 diffuse  {glm::vec3(0.7f, 0.7f, 0.7f)};
-    glm::vec3 specular {glm::vec3(1.0f, 1.0f, 1.0f)};
+    glm::vec3 ambient  {glm::vec3(1.0f)};
+    glm::vec3 diffuse  {glm::vec3(10.0f)};
+    glm::vec3 specular {glm::vec3(10.0f)};
 
 protected:
     std::string lightName {"light"};
@@ -29,10 +29,11 @@ public:
         glGenFramebuffers(1, &depthMapFBO);
     }
 
-    void setColor(const glm::vec3 &ambient, const glm::vec3 &diffuse)
+    void setColor(const glm::vec3 &ambient, const glm::vec3 &diffuse, const glm::vec3 &specular)
     {
         this->ambient = ambient;
         this->diffuse = diffuse;
+        this->specular = specular;
     }
 
     void setUniformName(const std::string &name)

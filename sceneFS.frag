@@ -10,10 +10,14 @@ out vec4 FragColor;
 uniform vec3 cameraPos;
 
 struct Material {
-	sampler2D diffuse;
-	sampler2D specular;
-	bool hasDiffuse;
-	bool hasSpecular;
+	sampler2D diffuseTex;
+	sampler2D specularTex;
+	bool hasDiffuseTex;
+	bool hasSpecularTex;
+
+	vec3 ambientColor;
+	vec3 diffuseColor;
+	vec3 specularColor;
 
 	float shininess;
 };
@@ -65,33 +69,27 @@ float computeShadow(vec3 fragPos, Light light)
 	return shadow;
 }
 
-float ks = 0.2;
-
 vec3 computePointLight(Light light, vec3 normal, vec3 fragPos, vec2 texCoords, vec3 viewDir)
 {
-	vec3 ambient = light.ambient;
-	if (material.hasDiffuse) ambient *= vec3(texture(material.diffuse, texCoords));
+	vec3 ambient = material.ambientColor * light.ambient;
+	if (material.hasDiffuseTex) ambient *= vec3(texture(material.diffuseTex, texCoords));
 
 	vec3 lightDir = normalize(-(fragPos - light.position));
 	float diffCoeff = max(dot(normal, lightDir), 0.0);
-	vec3 diffuse = light.diffuse * diffCoeff;
-	if (material.hasDiffuse)
-		diffuse *= vec3(texture(material.diffuse, texCoords));
+	vec3 diffuse = material.diffuseColor * light.diffuse * diffCoeff;
+	if (material.hasDiffuseTex) diffuse *= vec3(texture(material.diffuseTex, texCoords));
 
 	vec3 reflectDir = reflect(-lightDir, normal);
 	float specCoeff = pow(max(dot(reflectDir, viewDir), 0.0), material.shininess);
-	vec3 specular = light.specular * specCoeff;
-	/*
-	if (material.hasSpecular)
-		specular *= vec3(texture(material.specular, texCoords));
-	*/
+	vec3 specular = material.specularColor * light.specular * specCoeff;
+	//if (material.hasSpecularTex) specular *= vec3(texture(material.specularTex, texCoords));
 
 	float shadow = computeShadow(fragPos, light);
-	vec3 result = ambient + (1.0 - shadow) * (diffuse + ks * specular);
+	vec3 result = ambient + (1.0 - shadow) * (diffuse + specular);
 
 	float d = length(fragPos - light.position);
 	// TODO: re-implement distance attenuation
-	float a = 3 / d;
+	float a = 1 / (d * d);
 	result *= a;
 
 	return result;
@@ -106,8 +104,4 @@ void main()
 	result += computePointLight(light, normal, fs_in.FragPos, fs_in.FragTexCoords, viewDir);
 
     FragColor = vec4(result, 1.0);
-	/*
-	float closestDepth = texture(cubeMap, fs_in.FragPos - light.position).r;
-	FragColor = vec4(vec3(closestDepth), 1.0);
-	*/
 }

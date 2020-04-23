@@ -93,10 +93,23 @@ private:
                 indices.push_back(face.mIndices[j]);
         }
 
-        float shininess {0.0f};
+        Mesh::Material meshMaterial;
         if (mesh->mMaterialIndex >= 0) {
             aiMaterial *material = scene->mMaterials[mesh->mMaterialIndex];
+
+            aiColor4D ambient, diffuse, specular;
+            float shininess;
+
             material->Get(AI_MATKEY_SHININESS, shininess);
+            if (shininess > 0.0f) meshMaterial.shininess = shininess;
+
+            if (aiGetMaterialColor(material, AI_MATKEY_COLOR_AMBIENT, &ambient) == AI_SUCCESS)
+                meshMaterial.ambientColor = glm::vec3(ambient.r, ambient.g, ambient.b);
+            if (aiGetMaterialColor(material, AI_MATKEY_COLOR_DIFFUSE, &diffuse) == AI_SUCCESS)
+                meshMaterial.diffuseColor = glm::vec3(diffuse.r, diffuse.g, diffuse.b);
+            if (aiGetMaterialColor(material, AI_MATKEY_COLOR_SPECULAR, &specular) == AI_SUCCESS)
+                meshMaterial.specularColor = glm::vec3(specular.r, specular.g, specular.b);
+            
             std::vector<Texture> diffuseMaps = loadMaterialTextures(material, aiTextureType_DIFFUSE, "diffuse");
             textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
             std::vector<Texture> specularMaps = loadMaterialTextures(material, aiTextureType_SPECULAR, "specular");
@@ -104,7 +117,7 @@ private:
         }
 
         Mesh meshObj(vertices, indices, textures);
-        if (shininess != 0.0f) meshObj.setSpecularShininess(shininess);
+        meshObj.setMaterial(meshMaterial);
 
         return meshObj;
     }
