@@ -5,6 +5,7 @@
 #include "Object.h"
 
 #include <glm/glm.hpp>
+#include <cmath>
 
 class DirLight : public Light
 {
@@ -68,14 +69,24 @@ public:
 
 class PointLight : public Light
 {
+public:
+    struct AttenuationParams {
+        float constant;
+        float linear;
+        float quadratic;
+        AttenuationParams(const float &c, const float &l, const float &q) : constant(c), linear(l), quadratic(q) {}
+    };
+    static const AttenuationParams attenuation;
+
 private:
     std::string positionFieldName       {"position"      },
                 farPlaneFieldName       {"farPlane"      },
                 shadowMatricesFieldName {"shadowMatrices"};
 
+    static const unsigned int minIntensityLevel;
+
     glm::vec3 position;
     glm::mat4 shadowMatrices[6];
-    float attenuation[3] = { 0.0f, 0.0f, 0.0f };
 
     unsigned int cubeMapTextureID;
 
@@ -89,6 +100,23 @@ private:
         shader.setVec3(positionStream.str(), position);
         farPlaneStream << lightName << "." << farPlaneFieldName;
         shader.setFloat(farPlaneStream.str(), farPlane);
+
+        float radius = computeRadius();
+        shader.setFloat(lightName + ".radius", radius);
+    }
+
+    float computeRadius()
+    {
+        float kc = attenuation.constant,
+              kl = attenuation.linear,
+              kq = attenuation.quadratic;
+        
+        float lightMax = std::fmaxf(std::fmaxf(diffuse.r, diffuse.g), diffuse.b);
+        // 3.0 / 256.0 is the threshold of intensity level below which 
+        // we consider to be outside the radius
+        float radius = (-kl + sqrt(kl * kl - 4 * kq * (kc - lightMax * (256.0 / (float)minIntensityLevel))))
+                        / (2 * kq);
+        return radius;
     }
 
     void updateShadowMatrices()
@@ -140,12 +168,13 @@ public:
         updateShadowMatrices();
     }
 
-    void writeModelMatrixInShader(Shader &shader, const std::string &name)
+    void writeToLightShader(Shader &shader)
     {
         glm::mat4 model(1.0f);
         model = glm::translate(model, position);
         model = glm::scale(model, glm::vec3(0.2f));
-        shader.setMatrix4f(name, model);
+        shader.setMatrix4f("model", model);
+        shader.setVec3("color", ambient);
     }
 
     virtual void writeToShader(Shader &shader)
@@ -173,3 +202,6 @@ public:
         modelObj.draw();
     }
 };
+
+const PointLight::AttenuationParams PointLight::attenuation {1.0f, 0.7f, 1.8f};
+const unsigned int PointLight::minIntensityLevel {5};

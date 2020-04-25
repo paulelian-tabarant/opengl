@@ -72,3 +72,9 @@ aiScene *scene = importer.ReadFile(path, <options>);
 ~~~
 
 `<options>` permet de rajouter des *flags* comme `aiProcess_Triangulate` pour trianguler tous les éléments (si autres primitives que triangles sont dans le fichier, comme des quads) ou `aiProcess_FlipUVs` pour inverser l'axe Y au moment de l'application des coordonnées de texture, ou encore `aiProcess_GenNormals` pour calculer automatiquement les normales à partir des positions et des indices.
+
+## Deferred shading
+
+Il faut bien noter que l'annulation des fragments situés derrière d'autres du point de vue de la caméra s'effectue à la sortie du fragment shader. En calculant l'illumination de manière classique (forward shading), on calcule l'illumination au niveau de fragments qui ne sont jamais affichés à l'écran. Pour accélérer les choses, il peut être pertinent d'utiliser la méthode du *deferred shading* qui utilise une deuxième passe de rendu pour calculer l'illumination, en ne se basant plus sur les fragments mais cette fois-ci sur les pixels finaux dans le plan de la caméra. Tous les fragments inutiles sont éliminés par la première passe de rendu.
+
+À la sortie de la première passe, on obtient toutes les informations nécesaires au calcul des valeurs d'illumination au niveau du pixel, soit une normale, une position dans la scène 3D, une couleur d'albedo (diffuse) et une intensité spéculaire.

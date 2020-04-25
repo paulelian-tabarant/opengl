@@ -25,9 +25,10 @@ float deltaTime     {0.0f},
       lastFrameTime {0.0f};
 
 std::unique_ptr<Camera> camera;
-std::unique_ptr<Model> roomCube;
+std::unique_ptr<Model> roomBox;
 std::unique_ptr<Model> stitch;
-std::unique_ptr<PointLight> pointLight;
+const unsigned int lightsNb {20};
+std::unique_ptr<PointLight> pointLights[lightsNb];
 
 // GLFW callback functions
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -66,49 +67,87 @@ int main(int argc, char *argv[])
     glfwSetScrollCallback(window, scroll_callback);
 
     // Init object models
-    roomCube = std::make_unique<Model>("Models/cube/cube.obj");
-    roomCube->setScale(10.0f, 10.0f, 10.0f);
+    roomBox = std::make_unique<Model>("Models/cube/cube.obj");
+    roomBox->setPosition(0.0f, 0.0f, -0.2f);
+    roomBox->setScale(10.0f, 10.0f, 10.0f);
 
     stitch = std::make_unique<Model>("Models/stitch/stitch.obj");
-    stitch->setPosition(0.0f, 0.0f, -3.0f);
+    stitch->setScale(1.3f, 1.3f, 1.3f);
+    stitch->setPosition(0.0f, -1.5f, -3.5f);
 
-    pointLight = std::make_unique<PointLight>();
-    // Call this method to generate a whole cubic depth map for shadow rendering
-    pointLight->initCubeMap();
+    srand(time(NULL));
+    for (unsigned int i = 0; i < lightsNb; i++) {
+        float x = ((rand() % 100) / 100.0) * 8.0 - 4.0,
+              y = ((rand() % 100) / 100.0) * 8.0 - 4.0,
+              z = ((rand() % 100) / 100.0) * 8.0 - 6.0;
+        float r = ((rand() % 100) / 100.0);
+        float g = ((rand() % 100) / 100.0);
+        float b = ((rand() % 100) / 100.0);
+        pointLights[i] = std::make_unique<PointLight>(x, y, z);
+        glm::vec3 diffuse(r, g, b);
+        pointLights[i]->setColor(diffuse * 0.8f, diffuse * 1.2f, diffuse * 1.2f);
+        pointLights[i]->setUniformName("lights[" + std::to_string(i) + "]");
+    }
 
     // Enable z-buffer
     glEnable(GL_DEPTH_TEST);
 
     // CAUTION: always init buffers after enabling GL_DEPTH_TEST
 
-    // Init frame buffer for HDR rendering
-    unsigned int hdrFBO;
-    glGenFramebuffers(1, &hdrFBO);
-    unsigned int colorBuffer;
-    glGenTextures(1, &colorBuffer);
-    glBindTexture(GL_TEXTURE_2D, colorBuffer);
+    // Init frame buffer for deferred shading
+    unsigned int gFrameBuffer;
+    glGenFramebuffers(1, &gFrameBuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, gFrameBuffer);
+    unsigned int gPositionTex, gNormalTex, gColorSpecTex;
+
+    glGenTextures(1, &gPositionTex);
+    glBindTexture(GL_TEXTURE_2D, gPositionTex);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, screenWidth, screenHeight, 0, GL_RGBA, GL_FLOAT, NULL);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    unsigned int rboDepth;
-    glGenRenderbuffers(1, &rboDepth);
-    glBindRenderbuffer(GL_RENDERBUFFER, rboDepth);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, gPositionTex, 0);
+
+    glGenTextures(1, &gNormalTex);
+    glBindTexture(GL_TEXTURE_2D, gNormalTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, screenWidth, screenHeight, 0, GL_RGB, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, gNormalTex, 0);
+
+    glGenTextures(1, &gColorSpecTex);
+    glBindTexture(GL_TEXTURE_2D, gColorSpecTex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, screenWidth, screenHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, gColorSpecTex, 0);
+
+    GLenum frameBufferTextures[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
+    glDrawBuffers(3, frameBufferTextures);
+
+    unsigned int gRenderBuffer;
+    glGenRenderbuffers(1, &gRenderBuffer);
+    glBindRenderbuffer(GL_RENDERBUFFER, gRenderBuffer);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, screenWidth, screenHeight);
-    glBindFramebuffer(GL_FRAMEBUFFER, hdrFBO);
-    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, colorBuffer, 0);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rboDepth);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, gRenderBuffer);
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-        std::cout << "Framebuffer not complete !" << std::endl;
+        std::cout << "Framebuffer not complete ! " << std::endl;
+
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // Shader initialization
-    Shader objShader("sceneVS.vert", "", "sceneFS.frag");
+    Shader geomShader("geomVS.vert", "", "geomFS.frag");
     // Init light object (also rendered as cube)
     Shader lightShader("lightVS.vert", "", "lightFS.frag");
     // Shadow mapping
     Shader depthShader("depthShaderVS.vert", "depthShaderGS.geom", "depthShaderFS.frag");
     // HDR rendering
-    Shader hdrShader("hdrVS.vert", "", "hdrFS.frag");
+    Shader illumShader("illumVS.vert", "", "illumFS.frag");
+    illumShader.use();
+    illumShader.setInt("positionTex", 29);
+    illumShader.setInt("normalTex", 30);
+    illumShader.setInt("colorSpecularTex", 31);
 
     // Init camera object to navigate in the scene
     camera = std::make_unique<Camera>();
@@ -118,51 +157,46 @@ int main(int argc, char *argv[])
         // Handle user input in a specific function
         processInput(window);
 
-        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+        glClearColor(0.0, 0.0, 0.0, 1.0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        float x = sin(glfwGetTime() * 0.5) * 3.0;
-        pointLight->setPosition(glm::vec3(x, 0.0f, 3.0f));
-
-        // Generate the shadow map : 1st render pass
-        glViewport(0, 0, pointLight->SHADOW_WIDTH, pointLight->SHADOW_HEIGHT);
-        glBindFramebuffer(GL_FRAMEBUFFER, pointLight->depthMapFBO);
-            glClear(GL_DEPTH_BUFFER_BIT); // check if this line is necessary
-            depthShader.use();
-            pointLight->writeToDepthShader(depthShader);
-            renderScene(depthShader);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        // Note: GL_DEPTH_BUFFER_BIT automatically discards hidden fragments
-        // from calculations under the hood (as it is also done with classic rendering
-        // when fragments are behind others from the camera point of view)
-
-        // Render scene with shadow map results
-        glViewport(0, 0, screenWidth, screenHeight);
-        glBindFramebuffer(GL_FRAMEBUFFER, hdrFBO);
+        glBindFramebuffer(GL_FRAMEBUFFER, gFrameBuffer);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            objShader.use();
-            // view, projection and cameraPos uniforms
-            camera->writeToShader(objShader, screenWidth, screenHeight);
-            // Use frame buffer result from the depth shader pass
-            objShader.setInt("cubeMap", 0);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_CUBE_MAP, pointLight->getCubeMapTextureId());
-            pointLight->writeToShader(objShader);
-            renderScene(objShader);
-
-            lightShader.use();
-            camera->writeToShader(lightShader, screenWidth, screenHeight);
-            pointLight->writeModelMatrixInShader(lightShader, "model");
-            pointLight->draw();
+            geomShader.use();
+            camera->writeToShader(geomShader, screenWidth, screenHeight);
+            renderScene(geomShader);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-        // Final HDR rendering
+        glViewport(0, 0, screenWidth, screenHeight);
+
+        // Final illumination pass
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        hdrShader.use();
-        hdrShader.setInt("hdrBuffer", 0);
+        illumShader.use();
+        glActiveTexture(GL_TEXTURE29);
+        glBindTexture(GL_TEXTURE_2D, gPositionTex);
         glActiveTexture(GL_TEXTURE30);
-        glBindTexture(GL_TEXTURE_2D, colorBuffer);
+        glBindTexture(GL_TEXTURE_2D, gNormalTex);
+        glActiveTexture(GL_TEXTURE31);
+        glBindTexture(GL_TEXTURE_2D, gColorSpecTex);
+        camera->writeToShader(illumShader, screenWidth, screenHeight);
+        illumShader.setFloat("attenuation.kc", PointLight::attenuation.constant);
+        illumShader.setFloat("attenuation.kl", PointLight::attenuation.linear);
+        illumShader.setFloat("attenuation.kq", PointLight::attenuation.quadratic);
+        for (unsigned int i = 0; i < lightsNb; i++)
+            pointLights[i]->writeToShader(illumShader);
         renderQuad();
+
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, gFrameBuffer);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        glBlitFramebuffer(0, 0, screenWidth, screenHeight, 0, 0, screenWidth, screenHeight, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        lightShader.use();
+        camera->writeToShader(lightShader, screenWidth, screenHeight);
+        for (unsigned int i = 0; i < lightsNb; i++) {
+            pointLights[i]->writeToLightShader(lightShader);
+            pointLights[i]->draw();
+        }
 
         glfwSwapBuffers(window);
 
@@ -173,8 +207,6 @@ int main(int argc, char *argv[])
 
         // Look for new interaction events
         glfwPollEvents();
-
-        static int i = 0;
     }
 
     // Clean GLFW variables data
@@ -189,9 +221,9 @@ void renderScene(Shader &shader)
     stitch->draw(shader);
 
     // Room walls as a cube
-    shader.setMatrix4f("model", roomCube->getModelMat());
+    shader.setMatrix4f("model", roomBox->getModelMat());
     shader.setInt("reverseNormals", 1);
-    roomCube->draw(shader);
+    roomBox->draw(shader);
     shader.setInt("reverseNormals", 0);
 }
 

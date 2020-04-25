@@ -12,12 +12,13 @@ private:
                 diffuseFieldName  {"diffuse"},
                 specularFieldName {"specular"};
 
+protected:
+
+    std::string lightName {"light"};
+
     glm::vec3 ambient  {glm::vec3(1.0f)};
     glm::vec3 diffuse  {glm::vec3(10.0f)};
     glm::vec3 specular {glm::vec3(10.0f)};
-
-protected:
-    std::string lightName {"light"};
     // CAUTION: be sure that far plane value acccurately embeds all your scene details
     float nearPlane {1.0f}, farPlane {25.0f};
 
