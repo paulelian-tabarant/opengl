@@ -64,9 +64,9 @@ public:
     }
 
     glm::vec3 getPosition() { return pos; }
+    glm::mat4 getViewMatrix() { return glm::lookAt(pos, pos + front, up); }
 
 private:
-    glm::mat4 getViewMatrix() { return glm::lookAt(pos, pos + front, up); }
 
     glm::mat4 getProjMatrix(const int &widthPx, const int &heightPx) 
     { 

@@ -83,8 +83,6 @@ private:
                 farPlaneFieldName       {"farPlane"      },
                 shadowMatricesFieldName {"shadowMatrices"};
 
-    static const unsigned int minIntensityLevel;
-
     glm::vec3 position;
     glm::mat4 shadowMatrices[6];
 
@@ -100,23 +98,6 @@ private:
         shader.setVec3(positionStream.str(), position);
         farPlaneStream << lightName << "." << farPlaneFieldName;
         shader.setFloat(farPlaneStream.str(), farPlane);
-
-        float radius = computeRadius();
-        shader.setFloat(lightName + ".radius", radius);
-    }
-
-    float computeRadius()
-    {
-        float kc = attenuation.constant,
-              kl = attenuation.linear,
-              kq = attenuation.quadratic;
-        
-        float lightMax = std::fmaxf(std::fmaxf(diffuse.r, diffuse.g), diffuse.b);
-        // 3.0 / 256.0 is the threshold of intensity level below which 
-        // we consider to be outside the radius
-        float radius = (-kl + sqrt(kl * kl - 4 * kq * (kc - lightMax * (256.0 / (float)minIntensityLevel))))
-                        / (2 * kq);
-        return radius;
     }
 
     void updateShadowMatrices()
@@ -184,6 +165,14 @@ public:
         writeInnerParams(shader);
     }
 
+    void writeToShaderFromView(Shader &shader, glm::mat4 view)
+    {
+        Light::writeToShader(shader);
+
+        glm::vec3 viewPosition = glm::vec3(view * glm::vec4(position, 1.0f));
+        shader.setVec3(lightName + ".position", viewPosition);
+    }
+
     void writeToDepthShader(Shader &depthShader)
     {
         writeInnerParams(depthShader);
@@ -204,4 +193,3 @@ public:
 };
 
 const PointLight::AttenuationParams PointLight::attenuation {1.0f, 0.7f, 1.8f};
-const unsigned int PointLight::minIntensityLevel {5};

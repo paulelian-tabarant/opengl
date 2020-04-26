@@ -12,6 +12,9 @@
 
 class Shader 
 {
+private:
+    static const std::string baseDir;
+
 public:
     // Program ID
     unsigned int ID;
@@ -29,8 +32,8 @@ public:
         gShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
         fShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
         try {
-            vShaderFile.open(vertexPath);
-            fShaderFile.open(fragmentPath);
+            vShaderFile.open(baseDir + vertexPath);
+            fShaderFile.open(baseDir + fragmentPath);
             std::stringstream vShaderStream, fShaderStream;
             vShaderStream << vShaderFile.rdbuf();
             fShaderStream << fShaderFile.rdbuf();
@@ -39,7 +42,7 @@ public:
             vertexCode = vShaderStream.str();
             fragmentCode = fShaderStream.str();
             if (geometryPath != "") {
-                gShaderFile.open(geometryPath);
+                gShaderFile.open(baseDir + geometryPath);
                 std::stringstream gShaderStream;
                 gShaderStream << gShaderFile.rdbuf();
                 gShaderFile.close();
@@ -132,3 +135,5 @@ public:
         glUniformMatrix4fv(glGetUniformLocation(ID, name.c_str()), 1, GL_FALSE, glm::value_ptr(value));
     }
 };
+
+const std::string Shader::baseDir {"Shaders/"};
