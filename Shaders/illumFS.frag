@@ -30,9 +30,6 @@ struct Attenuation {
 };
 uniform Attenuation attenuation;
 
-#define LIGHTS_NB 3
-uniform Light lights[LIGHTS_NB];
-
 #define PI 3.1415926535897932
 const float Roughness = 0.1;
 // Diamond
@@ -40,6 +37,7 @@ const vec3 F0 = vec3(0.9);
 // Metallic surface (= 1.0 if metallic)
 const float Metallic = 0.0;
 
+/*
 
 float computeAttenuation(vec3 fragPos, vec3 lightPos)
 {
@@ -113,6 +111,7 @@ vec3 computePointLight(Light light, vec4 albedoSpec, vec3 normal, vec3 fragPos, 
 
 	return (kd * diffuse + specular) * l * n_dot_lightdir;
 }
+*/
 
 void main()
 {
@@ -123,14 +122,17 @@ void main()
 	float ao 		= texture(ssaoTex, FragTexCoords).r;
 
 	vec3 result = vec3(0.0);
+	/*
 	for (int i = 0; i < LIGHTS_NB; i++)
     	result += computePointLight(lights[i], albedoSpec, normal, position, viewDir, ao);
+		*/
 
 	vec3 ambient = ao * albedoSpec.rgb * vec3(0.05);
 	result += ambient;
 
-	vec3 fragRgb;
-	fragRgb = pow(result, vec3(1.0 / 2.2));
+	vec3 fragRgb = result;
+	fragRgb = fragRgb / (fragRgb + vec3(1.0));
+	fragRgb = pow(fragRgb, vec3(1.0 / 2.2));
 
     FragColor = vec4(fragRgb, albedoSpec.a);
 }
