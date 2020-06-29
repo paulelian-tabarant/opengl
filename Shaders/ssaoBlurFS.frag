@@ -17,5 +17,5 @@ void main()
         }
     }
     // We use a 4x4 kernel filter
-    FragBlurredAO = result / 16.0;
+    FragBlurredAO = result / 64.0;
 }

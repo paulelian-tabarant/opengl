@@ -9,6 +9,8 @@
 #include "LightTypes.h"
 #include "Model.h"
 #include "ScreenSpaceAO.h"
+#include "DrawUtils.h"
+#include "ImageBasedLighting.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -26,11 +28,17 @@ float deltaTime     {0.0f},
       lastFrameTime {0.0f};
 
 std::unique_ptr<Camera> camera;
-std::unique_ptr<Model> stitch;
+std::unique_ptr<Model> objectModel;
 
 // Deferred shading geometry pass
-unsigned int gFrameBuffer;
+unsigned int gFrameBuffer, gRenderBuffer;
 unsigned int gPositionTex, gNormalTex, gColorSpecTex;
+
+// Buffers for simple geometry to be rendered
+unsigned int quadVAO {0};
+unsigned int quadVBO;
+unsigned int cubeVAO {0};
+unsigned int cubeVBO;
 
 // GLFW callback functions
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -38,8 +46,6 @@ void mouse_callback(GLFWwindow *window, double mouseX, double mouseY);
 void scroll_callback(GLFWwindow* window, double dx, double dy);
 
 void processInput(GLFWwindow *window);
-void renderQuad();
-void renderCube();
 void renderScene(Shader &shader);
 void initGeometryPass();
 
@@ -70,12 +76,12 @@ int main(int argc, char *argv[])
     // Scroll callback
     glfwSetScrollCallback(window, scroll_callback);
 
-    stitch = std::make_unique<Model>("Models/stitch/stitch.obj");
-    stitch->setPosition(0.0f, -2.0f, -4.0f);
-
     // Enable z-buffer
     glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
+
+	// Avoid non-linear effects when sampling low resolution cube maps
+	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 
     // CAUTION: always init buffers AFTER enabling GL_DEPTH_TEST
 
@@ -83,81 +89,16 @@ int main(int argc, char *argv[])
 	initGeometryPass();
 	ScreenSpaceAO ssao(screenWidth, screenHeight);
 
-	// Setup envmap framebuffer
-	unsigned int envmapFBO, envmapRBO;
-	glGenFramebuffers(1, &envmapFBO);
-	glGenRenderbuffers(1, &envmapRBO);
-	glBindFramebuffer(GL_FRAMEBUFFER, envmapFBO);
-	glBindRenderbuffer(GL_RENDERBUFFER, envmapRBO);
-	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
-	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, envmapRBO);
-
-	// Load envmap image
-	stbi_set_flip_vertically_on_load(true);
-	int width, height, nrComponents;
-    float *data = stbi_loadf(std::string("Images/PineTree.hdr").c_str(), &width, &height, &nrComponents, 0);
-    unsigned int hdrTexture;
-    if (data)
-    {
-        glGenTextures(1, &hdrTexture);
-        glBindTexture(GL_TEXTURE_2D, hdrTexture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, data); // note how we specify the texture's data value to be float
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-        stbi_image_free(data);
-    }
-    else
-    {
-        std::cout << "Failed to load HDR image." << std::endl;
-    }
-
-	// Setup environment cubemap
-	unsigned int envCubemap;
-	glGenTextures(1, &envCubemap);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
-	for (unsigned int i = 0; i < 6; ++i)
-    {
-        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, 512, 512, 0, GL_RGB, GL_FLOAT, nullptr);
-    }
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR); 
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-	// Convert equirectangular hdr texture to cubemap
-    glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
-    glm::mat4 captureViews[] =
-    {
-        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
-        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
-        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)),
-        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)),
-        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f,  1.0f), glm::vec3(0.0f, -1.0f,  0.0f)),
-        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, -1.0f,  0.0f))
-    };
-	Shader equirectToCubemapShader("lightingCubeVS.vert", "", "lightingCubeFS.frag");
-	equirectToCubemapShader.use();
-	equirectToCubemapShader.setInt("equirectangularMap", 0);
-	equirectToCubemapShader.setMatrix4f("projection", captureProjection);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, hdrTexture);
-	glViewport(0, 0, 512, 512);
-	for (unsigned int i = 0; i < 6; ++i)
-    {
-        equirectToCubemapShader.setMatrix4f("view", captureViews[i]);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, envCubemap, 0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        renderCube();
-    }
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	// Image-based lighting object
+	char imagePath[] {"Images/appartment.hdr"};
+	ImageBasedLighting ibl(imagePath, 5);
 
     // Shaders initialization
     Shader geomShader("geomVS.vert", "", "geomFS.frag");
+	// Skybox
+	Shader environmentShader("environmentVS.vert", "", "environmentFS.frag");
+	environmentShader.use();
+	ibl.setEnvMapTextures(environmentShader);
     // Screen space ambient occlusion
     // CAUTION: verify texture names !!!
     Shader ssaoShader("ssaoVS.vert", "", "ssaoFS.frag");
@@ -165,6 +106,9 @@ int main(int argc, char *argv[])
     ssaoShader.setInt("positionTex", 29);
     ssaoShader.setInt("normalTex", 30);
     ssaoShader.setInt("noiseTex", 10);
+	Shader ssaoBlurShader("ssaoVS.vert", "", "ssaoBlurFS.frag");
+	ssaoBlurShader.use();
+	ssaoBlurShader.setInt("ssaoTex", 0);
     // Init light object (also rendered as cube)
     Shader lightShader("lightVS.vert", "", "lightFS.frag");
     // HDR rendering
@@ -174,37 +118,40 @@ int main(int argc, char *argv[])
     illumShader.setInt("normalTex", 30);
     illumShader.setInt("colorSpecTex", 31);
     illumShader.setInt("ssaoTex", 10);
-	// Skybox shader
-	Shader envmapShader("environmentVS.vert", "", "environmentFS.frag");
-	envmapShader.use();
-	envmapShader.setInt("environmentMap", 0);
+	ibl.setTextures(illumShader);
 
     // Init camera object to navigate in the scene
     camera = std::make_unique<Camera>();
+
+    objectModel = std::make_unique<Model>("Models/batman/batman.obj");
+	objectModel->setPosition(0.0f, 0.0f, -2.0f);
 
     // Render loop
     while (!glfwWindowShouldClose(window)) {
         // Handle user input in a specific function
         processInput(window);
 
-		/*
         glBindFramebuffer(GL_FRAMEBUFFER, gFrameBuffer);
             glClearColor(0.0, 0.0, 0.0, 1.0);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             geomShader.use();
             camera->writeToShader(geomShader, screenWidth, screenHeight);
             renderScene(geomShader);
-
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-        // SSAO pass
+        // SSAO passes (computation + blur)
         glBindFramebuffer(GL_FRAMEBUFFER, ssao.getFbo());
             glClear(GL_COLOR_BUFFER_BIT);
             ssaoShader.use();
-			ssao.loadMainPass(ssaoShader, gPositionTex, gNormalTex);
+			ssao.setUniforms(ssaoShader, gPositionTex, gNormalTex);
             camera->writeToShader(ssaoShader, screenWidth, screenHeight);
-            renderQuad();
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            DrawUtils::renderQuad(quadVAO, quadVBO);
+		glBindFramebuffer(GL_FRAMEBUFFER, ssao.getBlurFbo());
+			glClear(GL_COLOR_BUFFER_BIT);
+			ssaoBlurShader.use();
+			ssao.setBlurUniforms(ssaoBlurShader);
+			DrawUtils::renderQuad(quadVAO, quadVBO);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         // Final illumination pass
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -216,20 +163,20 @@ int main(int argc, char *argv[])
         glActiveTexture(GL_TEXTURE31);
         glBindTexture(GL_TEXTURE_2D, gColorSpecTex);
         glActiveTexture(GL_TEXTURE10);
-        glBindTexture(GL_TEXTURE_2D, ssao.getOutputTexId());
+        glBindTexture(GL_TEXTURE_2D, ssao.getBlurOutputTexId());
+		glActiveTexture(GL_TEXTURE11);
+		ibl.setUniforms(illumShader);
         camera->writeToShader(illumShader, screenWidth, screenHeight);
         illumShader.setFloat("attenuation.kc", PointLight::attenuation.constant);
         illumShader.setFloat("attenuation.kl", PointLight::attenuation.linear);
         illumShader.setFloat("attenuation.kq", PointLight::attenuation.quadratic);
-        renderQuad();
-		*/
+        DrawUtils::renderQuad(quadVAO, quadVBO);
 
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		envmapShader.use();
-		camera->writeToShader(envmapShader, screenWidth, screenHeight);
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
-		renderCube();
+		// Draw envmap image in the background
+		environmentShader.use();
+		camera->writeToShader(environmentShader, screenWidth, screenHeight);
+		ibl.setEnvMapUniforms(environmentShader);
+		DrawUtils::renderCube(cubeVAO, cubeVBO);
 
         glfwSwapBuffers(window);
 
@@ -249,114 +196,8 @@ int main(int argc, char *argv[])
 
 void renderScene(Shader &shader)
 {
-    shader.setMatrix4f("model", stitch->getModelMat());
-    stitch->draw(shader);
-}
-
-unsigned int quadVAO = 0;
-unsigned int quadVBO;
-
-void renderQuad()
-{
-    if (quadVAO == 0) {
-        float quadVertices[] {
-            -1.0f,  1.0f, 0.0f, 0.0f, 1.0f,
-            -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
-            1.0f,  1.0f, 0.0f, 1.0f, 1.0f,
-            1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
-        };
-        // initialize vertex attributs layout
-        glGenVertexArrays(1, &quadVAO);
-        glBindVertexArray(quadVAO);
-        // Prepare GPU buffer for receiving 3D positions
-        glGenBuffers(1, &quadVBO);
-        glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
-        // Vertex attributes
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
-    }
-
-    glBindVertexArray(quadVAO);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    glBindVertexArray(0);
-}
-
-unsigned int cubeVAO = 0;
-unsigned int cubeVBO;
-
-// © learnopengl.com (May 14th 2020)
-void renderCube()
-{
-    // initialize (if necessary)
-    if (cubeVAO == 0)
-    {
-        float vertices[] = {
-            // back face
-            -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
-             1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 1.0f, // top-right
-             1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 0.0f, // bottom-right         
-             1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 1.0f, // top-right
-            -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
-            -1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 1.0f, // top-left
-            // front face
-            -1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 0.0f, // bottom-left
-             1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 0.0f, // bottom-right
-             1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 1.0f, // top-right
-             1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 1.0f, // top-right
-            -1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 1.0f, // top-left
-            -1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 0.0f, // bottom-left
-            // left face
-            -1.0f,  1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-right
-            -1.0f,  1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 1.0f, // top-left
-            -1.0f, -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-left
-            -1.0f, -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-left
-            -1.0f, -1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 0.0f, // bottom-right
-            -1.0f,  1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-right
-            // right face
-             1.0f,  1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-left
-             1.0f, -1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-right
-             1.0f,  1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 1.0f, // top-right         
-             1.0f, -1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-right
-             1.0f,  1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-left
-             1.0f, -1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 0.0f, // bottom-left     
-            // bottom face
-            -1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 1.0f, // top-right
-             1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 1.0f, // top-left
-             1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 0.0f, // bottom-left
-             1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 0.0f, // bottom-left
-            -1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 0.0f, // bottom-right
-            -1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 1.0f, // top-right
-            // top face
-            -1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f, // top-left
-             1.0f,  1.0f , 1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 0.0f, // bottom-right
-             1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 1.0f, // top-right     
-             1.0f,  1.0f,  1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 0.0f, // bottom-right
-            -1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f, // top-left
-            -1.0f,  1.0f,  1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 0.0f  // bottom-left        
-        };
-        glGenVertexArrays(1, &cubeVAO);
-        glGenBuffers(1, &cubeVBO);
-        // fill buffer
-        glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-        // link vertex attributes
-        glBindVertexArray(cubeVAO);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindVertexArray(0);
-    }
-    // render Cube
-    glBindVertexArray(cubeVAO);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-    glBindVertexArray(0);
+    shader.setMatrix4f("model", objectModel->getModelMat());
+    objectModel->draw(shader);
 }
 
 void initGeometryPass()
@@ -390,6 +231,15 @@ void initGeometryPass()
 
     GLenum frameBufferTextures[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
     glDrawBuffers(3, frameBufferTextures);
+
+	glGenRenderbuffers(1, &gRenderBuffer);
+	glBindRenderbuffer(GL_RENDERBUFFER, gRenderBuffer);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, screenWidth, screenHeight);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, gRenderBuffer);
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		std::cout << "Framebuffer not complete ! " << std::endl;
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)

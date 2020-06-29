@@ -7,7 +7,7 @@ in vec3 localPos;
 uniform sampler2D equirectangularMap;
 
 const vec2 invAtan = vec2(0.1591, 0.3183);
-vec2 sphericalToCartesian(vec3 v)
+vec2 mapToTexRGB(vec3 v)
 {
 	vec2 uv = vec2(atan(v.z, v.x), asin(v.y));
 	uv *= invAtan;
@@ -17,7 +17,7 @@ vec2 sphericalToCartesian(vec3 v)
 
 void main()
 {
-	vec2 uv = sphericalToCartesian(normalize(localPos));
+	vec2 uv = mapToTexRGB(normalize(localPos));
 	vec3 color = texture(equirectangularMap, uv).rgb;
 
 	FragColor = vec4(color, 1.0);

@@ -11,6 +11,10 @@ uniform sampler2D colorSpecTex;
 
 uniform sampler2D ssaoTex;
 
+uniform samplerCube irradianceMap;
+uniform samplerCube prefilterMap;
+uniform sampler2D brdfLut;
+
 uniform vec3 cameraPos;
 uniform mat4 view;
 
@@ -31,13 +35,10 @@ struct Attenuation {
 uniform Attenuation attenuation;
 
 #define PI 3.1415926535897932
-const float Roughness = 0.1;
-// Diamond
-const vec3 F0 = vec3(0.9);
+const float Roughness = 0.2;
+const vec3 F0 = vec3(0.2);
 // Metallic surface (= 1.0 if metallic)
 const float Metallic = 0.0;
-
-/*
 
 float computeAttenuation(vec3 fragPos, vec3 lightPos)
 {
@@ -86,7 +87,26 @@ vec3 fresnelFunc(vec3 halfDir, vec3 viewDir, vec3 f0)
 	return f0 + (vec3(1.0) - f0) * (1.0 - pow(max(dot(halfDir, viewDir), 0.0), 5.0));
 }
 
-vec3 computePointLight(Light light, vec4 albedoSpec, vec3 normal, vec3 fragPos, vec3 viewDir, float ao)
+// © learnOpenGl website (diffuse irradiance)
+vec3 fresnelSchlickRoughness(vec3 normal, vec3 viewDir, vec3 f0, float roughness)
+{
+	float cosTheta = max(dot(normal, viewDir), 0.0);
+	return f0 + (max(vec3(1.0 - roughness), f0) - f0) * pow(1.0 - cosTheta, 5.0);
+}
+
+vec3 computeEnvLight(vec3 irradiance, vec4 albedoSpec, vec3 normal, vec3 fragPos, vec3 viewDir, float ao)
+{
+	vec3 f = fresnelSchlickRoughness(normal, viewDir, F0, Roughness);
+
+	// fresnel term determines the reflected energy factor ks (energy preservation)
+	vec3 kd = vec3(1.0) - f; 
+	vec3 diffuse = irradiance * albedoSpec.rgb;
+	vec3 ambient = kd * diffuse * ao;
+
+	return ambient;
+}
+
+vec3 computePointLight(Light light, vec4 albedoSpec, vec3 normal, vec3 fragPos, vec3 viewDir)
 {
 	vec3 lightDir = normalize(light.position - fragPos);
 
@@ -111,7 +131,6 @@ vec3 computePointLight(Light light, vec4 albedoSpec, vec3 normal, vec3 fragPos, 
 
 	return (kd * diffuse + specular) * l * n_dot_lightdir;
 }
-*/
 
 void main()
 {
@@ -120,19 +139,32 @@ void main()
     vec3 position 	= texture(positionTex, FragTexCoords).rgb;
     vec3 viewDir 	= normalize(-position);
 	float ao 		= texture(ssaoTex, FragTexCoords).r;
+	vec3 irradiance = texture(irradianceMap, normal).rgb;
 
-	vec3 result = vec3(0.0);
-	/*
-	for (int i = 0; i < LIGHTS_NB; i++)
-    	result += computePointLight(lights[i], albedoSpec, normal, position, viewDir, ao);
-		*/
+	if (albedoSpec.rgb == vec3(0.0)) discard;
 
-	vec3 ambient = ao * albedoSpec.rgb * vec3(0.05);
-	result += ambient;
+	// Diffuse environment part
+	vec3 diffuseEnvColor = computeEnvLight(irradiance, albedoSpec, normal, position, viewDir, ao);
 
-	vec3 fragRgb = result;
+	// Specular environment part
+	vec3 incident = reflect(-viewDir, normal);
+	// Prefiltered environment map was computed with 5 lods (0 to 4)
+	const float MAX_REFLECTION_LOD = 4.0;
+	vec3 prefilteredColor = textureLod(prefilterMap, incident, Roughness * MAX_REFLECTION_LOD).rgb;
+	float n_dot_v = max(dot(normal, viewDir), 0.0);
+	vec2 brdfFactors = texture(brdfLut, vec2(n_dot_v, Roughness)).rg;
+	vec3 f = fresnelSchlickRoughness(normal, viewDir, F0, Roughness);
+	vec3 specEnvColor = prefilteredColor * (f * brdfFactors.x + brdfFactors.y);
+
+	vec3 kd = vec3(1.0) - f;
+	kd *= 1.0 - Metallic;
+	vec3 ambient = ao * (kd * diffuseEnvColor + specEnvColor);
+
+	// TODO: add point lights BRDF contribution
+	vec3 fragRgb = ambient;
 	fragRgb = fragRgb / (fragRgb + vec3(1.0));
 	fragRgb = pow(fragRgb, vec3(1.0 / 2.2));
 
-    FragColor = vec4(fragRgb, albedoSpec.a);
+    //FragColor = vec4(fragRgb, albedoSpec.a);
+	FragColor = vec4(fragRgb, 1.0);
 }

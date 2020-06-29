@@ -9,15 +9,6 @@ public:
 	ScreenSpaceAO(unsigned int screenWidth, unsigned int screenHeight)
 		: SCREEN_WIDTH(screenWidth), SCREEN_HEIGHT(screenHeight)
 	{
-		glGenRenderbuffers(1, &gRenderBuffer);
-		glBindRenderbuffer(GL_RENDERBUFFER, gRenderBuffer);
-		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, screenWidth, screenHeight);
-		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, gRenderBuffer);
-		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-			std::cout << "Framebuffer not complete ! " << std::endl;
-
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
 		glGenFramebuffers(1, &ssaoFBO);
 		glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
 		glGenTextures(1, &ssaoOutputTex);
@@ -75,7 +66,7 @@ public:
 	unsigned int getOutputTexId() { return ssaoOutputTex; }
 	unsigned int getBlurOutputTexId() { return ssaoBlurOutputTex; }
 
-	void loadMainPass(Shader &shader, unsigned int gPositionTex, unsigned int gNormalTex)
+	void setUniforms(Shader &shader, unsigned int gPositionTex, unsigned int gNormalTex)
 	{
 		glActiveTexture(GL_TEXTURE10);
 		glBindTexture(GL_TEXTURE_2D, noiseTex);
@@ -89,15 +80,13 @@ public:
 		}
 	}
 
-	void loadBlurPass(Shader &shader)
+	void setBlurUniforms(Shader &shader)
 	{
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, ssaoOutputTex);
 	}
 
 private:
-	unsigned int gPositionTex, gNormalTex, gColorSpecTex;
-	unsigned int gRenderBuffer;
 	unsigned int ssaoFBO;
 	unsigned int ssaoOutputTex;
 	unsigned int blurFBO;
