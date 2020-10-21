@@ -13,7 +13,7 @@ unsigned int loadTexture(const char *path, const std::string &dir);
 class Model
 {
 public:
-    Model(const char *path)
+    Model(const std::string &path)
     {
         loadModel(path);
     }

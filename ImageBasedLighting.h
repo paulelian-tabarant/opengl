@@ -9,7 +9,7 @@
 class ImageBasedLighting
 {
 public:
-	ImageBasedLighting(char imagePath[], const unsigned int &maxMipLevels)
+	ImageBasedLighting(std::string imagePath, const unsigned int &maxMipLevels)
 		: envMapMipLevels(maxMipLevels)
 	{
 		unsigned int cubeVAO {0}, cubeVBO {0};
@@ -25,7 +25,7 @@ public:
 		// Load envmap image
 		stbi_set_flip_vertically_on_load(true);
 		int width, height, nrComponents;
-		float *data = stbi_loadf(imagePath, &width, &height, &nrComponents, 0);
+		float *data = stbi_loadf(imagePath.c_str(), &width, &height, &nrComponents, 0);
 		if (data)
 		{
 			glGenTextures(1, &hdrTextureId);
