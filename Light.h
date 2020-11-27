@@ -20,6 +20,7 @@ protected:
     std::string lightName {"light"};
 
 public:
+    Light(const std::string &uniformName) { this->lightName = uniformName; }
 
     void setColor(const glm::vec3 &ambient, const glm::vec3 &diffuse)
     {
@@ -27,12 +28,10 @@ public:
         this->diffuse = diffuse;
     }
 
-    void setUniformName(const std::string &name)
-    {
-        lightName = name;
-    }
+    virtual void writeModelMatrixInShader(Shader &shader, const std::string &uniformName) {}
+    virtual void draw() {}
 
-    void writeToShader(Shader &shader)
+    virtual void writeToShader(Shader &shader)
     {
         std::ostringstream ambientStream, diffuseStream, specularStream;
         ambientStream << lightName << "." << ambientFieldName;

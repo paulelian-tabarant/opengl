@@ -13,7 +13,7 @@ private:
     glm::vec3 direction;
 
 public:
-    DirLight(float x, float y, float z) : direction(glm::vec3(x,y,z)) {}
+    DirLight(const std::string &name, float x, float y, float z) : Light(name), direction(glm::vec3(x,y,z)) {}
 
     void setDirection(glm::vec3 direction)
     {
@@ -39,14 +39,14 @@ private:
     Object modelObj;
 
 public:
-    PointLight(float x, float y, float z) : position(glm::vec3(x,y,z)) {}
+    PointLight(const std::string &name, float x, float y, float z) : Light(name), position(glm::vec3(x,y,z)) {}
 
     void setPosition(const glm::vec3 &position)
     {
         this->position = position;
     }
 
-    void writeModelMatrixInShader(Shader &shader, std::string name)
+    void writeModelMatrixInShader(Shader &shader, const std::string &name) override
     {
         glm::mat4 model(1.0f);
         model = glm::translate(model, position);
@@ -63,7 +63,7 @@ public:
         shader.setVec3(positionStream.str(), position);
     }
 
-    void draw()
+    void draw() override
     {
         modelObj.draw();
     }
