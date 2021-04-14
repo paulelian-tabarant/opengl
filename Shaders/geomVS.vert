@@ -13,18 +13,13 @@ uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 
-uniform bool reverseNormals;
-
 void main() 
 {
     vec4 viewPos = view * model * vec4(vPos, 1.0);
     vs_out.FragPos = viewPos.xyz;
 
     mat3 normalMat = mat3(transpose(inverse(view * model)));
-    if (!reverseNormals) 
-        vs_out.FragNormal = normalMat * vNormal;
-    else 
-        vs_out.FragNormal = normalMat * (-1.0 * vNormal);
+    vs_out.FragNormal = normalMat * vNormal;
 
     vs_out.FragTexCoords = vTexCoords;
 
